@@ -1,0 +1,15 @@
+## Interface: 120105, 16001
+## Title: EasyFind [Auctionator]
+## Notes: Auctionator's prices on EasyFind's item rows, and your shopping lists in its search bar. Requires Auctionator.
+## Author: justawower
+## Version: 0.1.0
+## IconTexture: Interface\AddOns\EasyFind\textures\SpyglassMinimap
+## Group: EasyFind
+## Category: UI
+## Dependencies: EasyFind, Auctionator
+## SavedVariables: EasyFindAuctionatorDB
+## DefaultState: enabled
+
+Locales/enUS.lua
+Prices.lua
+Lists.lua

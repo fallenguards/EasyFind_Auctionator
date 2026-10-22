@@ -1,0 +1,10 @@
+*.zip
+release.conf
+release.sh
+dev/
+target/
+.claude/
+*.swp
+*~
+Thumbs.db
+.DS_Store

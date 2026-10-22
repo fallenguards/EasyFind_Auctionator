@@ -1,0 +1,298 @@
+-- Auctionator's shopping lists as EasyFind rows: each list and each of
+-- its items, found by name. At the auction house a click searches; away
+-- from it a list opens in the search bar and an item is looked up.
+-- Writes go through Auctionator's API only, on the player's own pick.
+local ADDON, ns = ...
+local API = EasyFind and EasyFind.API
+if not (API and API.VERSION == 1) then return end
+
+local L = ns.L
+local KEY = ns.KEY
+local MAX_TOOLTIP_ITEMS = 12
+
+local C_Item = C_Item
+local IsShiftKeyDown = IsShiftKeyDown
+local sformat, tconcat, mmin = string.format, table.concat, math.min
+
+-- Auctionator's list functions and manager, bound at login.
+local S = { ready = false }
+
+local NEED = { items = "GetShoppingListItems", create = "CreateShoppingList", delete = "DeleteShoppingListItem",
+               toString = "ConvertToSearchString", fromString = "ConvertFromSearchString", search = "MultiSearchAdvanced" }
+local MANAGER = { "GetCount", "GetByIndex", "GetIndexForName" }
+
+-- The API names no way to list the lists: their names come from the manager.
+local function Bind()
+    local v1 = Auctionator and Auctionator.API and Auctionator.API.v1
+    local manager = Auctionator and Auctionator.Shopping and Auctionator.Shopping.ListManager
+    if not (v1 and manager) then return false end
+    for k, name in pairs(NEED) do
+        if type(v1[name]) ~= "function" then return false end
+        S[k] = v1[name]
+    end
+    for i = 1, #MANAGER do
+        if type(manager[MANAGER[i]]) ~= "function" then return false end
+    end
+    S.manager = manager
+    return true
+end
+
+function ns.ListsReady() return S.ready end
+
+-- The player's lists in Auctionator's order; temporary search lists left out.
+local function EachList(fn)
+    local m = S.manager
+    for i = 1, m:GetCount() do
+        local list = m:GetByIndex(i)
+        if not (list.IsTemporary and list:IsTemporary()) then fn(list:GetName()) end
+    end
+end
+
+local function HasList(name) return S.manager:GetIndexForName(name) ~= nil end
+
+local function Items(name) return S.items(ADDON, name) end
+
+-- ==== terms =================================================================
+
+local function Range(min, max)
+    if min and max then return sformat(L["RANGE_FMT"], min, max) end
+    if min then return sformat(L["RANGE_MIN_FMT"], min) end
+    return sformat(L["RANGE_MAX_FMT"], max)
+end
+
+-- What a term asks for beyond the name, as short parts.
+local function TermParts(term, out)
+    if term.quantity then out[#out + 1] = sformat(L["TERM_QTY_FMT"], term.quantity) end
+    if term.tier then out[#out + 1] = sformat(L["TERM_TIER_FMT"], term.tier) end
+    if term.minItemLevel or term.maxItemLevel then
+        out[#out + 1] = sformat(L["TERM_ILVL_FMT"], Range(term.minItemLevel, term.maxItemLevel))
+    end
+    if term.minLevel or term.maxLevel then out[#out + 1] = sformat(L["TERM_LEVEL_FMT"], Range(term.minLevel, term.maxLevel)) end
+    if term.minCraftedLevel or term.maxCraftedLevel then
+        out[#out + 1] = sformat(L["TERM_CRAFTED_FMT"], Range(term.minCraftedLevel, term.maxCraftedLevel))
+    end
+    if term.minPrice or term.maxPrice then
+        out[#out + 1] = sformat(L["TERM_PRICE_FMT"], Range(term.minPrice and ns.Coins(term.minPrice), term.maxPrice and ns.Coins(term.maxPrice)))
+    end
+    local quality = term.quality and _G["ITEM_QUALITY" .. term.quality .. "_DESC"]
+    if quality then
+        local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[term.quality]
+        out[#out + 1] = color and color.color and color.color:WrapTextInColorCode(quality) or quality
+    end
+    local expansion = term.expansion and _G["EXPANSION_NAME" .. term.expansion]
+    if expansion then out[#out + 1] = expansion end
+    return out
+end
+
+-- The item behind a term's name, when the client knows it: its id, icon
+-- and link; nil for a name it has not seen.
+local function ItemOf(name)
+    local id, _, _, _, icon = C_Item.GetItemInfoInstant(name)
+    if not id then return nil end
+    local link = select(2, C_Item.GetItemInfo(id))
+    return id, icon, link or ("item:" .. id)
+end
+
+local function ListTerms(listName)
+    local items = Items(listName)
+    for i = 1, #items do items[i] = S.fromString(ADDON, items[i]) end
+    return items
+end
+
+-- A search at the auction house; a line when it is closed.
+function ns.SearchTerms(terms)
+    if not S.ready then return end
+    if not ns.AtAuctionHouse() then return ns.Print(L["NEED_AH"]) end
+    S.search(ADDON, terms)
+end
+
+-- ==== writes ================================================================
+
+-- A term onto a list through Auctionator's API: the list is written back
+-- whole with the term appended (the API has no append of its own).
+local function AddToList(listName, raw, shownName)
+    local items = HasList(listName) and Items(listName) or {}
+    for i = 1, #items do
+        if items[i] == raw then return ns.Print(sformat(L["ALREADY_FMT"], shownName, listName)) end
+    end
+    items[#items + 1] = raw
+    S.create(ADDON, listName, items)
+    ns.Print(sformat(L["ADDED_FMT"], shownName, listName))
+end
+
+-- The flyout: each list the term is not on, then a new one. Without a
+-- raw term the item's exact name is the term.
+function ns.AddToListRows(name, exceptList, raw)
+    if not S.ready then return nil end
+    raw = raw or S.toString(ADDON, { searchString = name, isExact = true })
+    local rows = {}
+    EachList(function(listName)
+        if listName ~= exceptList then
+            rows[#rows + 1] = { kind = "action", label = listName, onClick = function() AddToList(listName, raw, name) end }
+        end
+    end)
+    if #rows > 0 then rows[#rows + 1] = { kind = "separator" } end
+    rows[#rows + 1] = { kind = "action", label = L["MENU_NEW_LIST"], onClick = function()
+        API.ShowDialog({
+            text = L["DIALOG_NEW_LIST"], acceptText = L["DIALOG_CREATE"], hasEditBox = true,
+            onAccept = function(value)
+                value = value and strtrim(value) or ""
+                if value ~= "" then AddToList(value, raw, name) end
+            end,
+        })
+    end }
+    return rows
+end
+
+-- ==== rows ==================================================================
+
+local function ListSubtext(n)
+    if n == 0 then return L["LIST_SUBTEXT_EMPTY"] end
+    if n == 1 then return L["LIST_SUBTEXT_ONE"] end
+    return sformat(L["LIST_SUBTEXT_FMT"], n)
+end
+
+local function Rows()
+    if not S.ready then return {} end
+    local out = {}
+    EachList(function(listName)
+        local items = Items(listName)
+        out[#out + 1] = { name = listName, listName = listName, isList = true,
+                          searchCommandDesc = ListSubtext(#items), keywords = { "shopping", "list" } }
+        for i = 1, #items do
+            local term = S.fromString(ADDON, items[i])
+            local parts = TermParts(term, {})
+            local id, icon = ItemOf(term.searchString)
+            local desc = sformat(L["ITEM_SUBTEXT_FMT"], listName)
+            if #parts > 0 then desc = desc .. ", " .. tconcat(parts, ", ") end
+            out[#out + 1] = { name = term.searchString, listName = listName, raw = items[i], term = term,
+                              searchCommandDesc = desc, icon = icon, itemID = id, keywords = { listName } }
+        end
+    end)
+    return out
+end
+
+local function InsertChatLink(link)
+    local active = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
+    if active and active:IsShown() then
+        active:Insert(link)
+    elseif not (ChatEdit_InsertLink and ChatEdit_InsertLink(link)) and ChatFrame_OpenChat then
+        ChatFrame_OpenChat(link)
+    end
+end
+
+-- At the auction house a click searches the list or the term; elsewhere
+-- a list shows its items in the bar and an item is looked up. Shift
+-- links a known item in chat.
+local function Select(row)
+    if not S.ready then return end
+    if row.isList then
+        if ns.AtAuctionHouse() then return ns.SearchTerms(ListTerms(row.listName)) end
+        return API.ShowScope(KEY, row.name)
+    end
+    if IsShiftKeyDown() and row.itemID then
+        local _, _, link = ItemOf(row.name)
+        return InsertChatLink(link)
+    end
+    if ns.AtAuctionHouse() then return ns.SearchTerms({ row.term }) end
+    API.OpenSearch(row.name)
+end
+
+local function Hint(row)
+    if not S.ready then return nil end
+    local at = ns.AtAuctionHouse()
+    if row.isList then return { click = at and L["HINT_SEARCH"] or L["HINT_SHOW_LIST"] } end
+    return { click = at and L["HINT_SEARCH"] or L["HINT_FIND_ITEM"], shift = row.itemID and L["HINT_LINK"] or nil }
+end
+
+-- A list: its items with their last prices. An item: the item's own
+-- tooltip, then its list and what the term asks for.
+local function Tooltip(row, tt)
+    if not S.ready then return false end
+    if row.isList then
+        tt:SetText(row.name, 1, 1, 1)
+        local items = Items(row.listName)
+        for i = 1, mmin(#items, MAX_TOOLTIP_ITEMS) do
+            local term = S.fromString(ADDON, items[i])
+            local id, _, link = ItemOf(term.searchString)
+            local price = id and ns.AuctionPrice(link, id)
+            tt:AddDoubleLine(term.searchString, price and ns.Coins(price) or "", 1, 1, 1, 1, 1, 1)
+        end
+        if #items > MAX_TOOLTIP_ITEMS then tt:AddLine(sformat(L["TT_MORE_FMT"], #items - MAX_TOOLTIP_ITEMS), 0.7, 0.7, 0.7) end
+        return true
+    end
+    local id = ItemOf(row.name)
+    if id then tt:SetItemByID(id) else tt:SetText(row.name, 1, 1, 1) end
+    tt:AddLine(" ")
+    tt:AddLine(sformat(L["TT_ON_LIST_FMT"], row.listName), 1, 0.82, 0)
+    local parts = TermParts(row.term, {})
+    if #parts > 0 then tt:AddLine(tconcat(parts, ", "), 1, 1, 1) end
+    return true
+end
+
+local function Menu(row)
+    if not S.ready then return nil end
+    local rows = {}
+    if ns.AtAuctionHouse() then
+        rows[#rows + 1] = { kind = "action", label = L["MENU_SEARCH"], onClick = function()
+            if row.isList then ns.SearchTerms(ListTerms(row.listName)) else ns.SearchTerms({ row.term }) end
+        end }
+    end
+    if row.isList then return rows end
+    rows[#rows + 1] = { kind = "action", label = L["MENU_FIND"], onClick = function() API.OpenSearch(row.name) end }
+    rows[#rows + 1] = { kind = "menu", label = L["MENU_ADD"], rows = function() return ns.AddToListRows(row.name, row.listName, row.raw) end }
+    rows[#rows + 1] = { kind = "action", label = sformat(L["MENU_REMOVE_FMT"], row.listName), onClick = function()
+        S.delete(ADDON, row.listName, row.raw)
+        ns.Print(sformat(L["REMOVED_FMT"], row.name, row.listName))
+    end }
+    return rows
+end
+
+-- ==== registration ==========================================================
+
+API.RegisterSearchProvider({
+    key = KEY,
+    label = L["PROVIDER_LABEL"],
+    category = L["CATEGORY"],
+    extension = KEY,
+    eager = true,
+    words = { "shopping", "list", "lists" },
+    aliases = { "shopping", "shoppinglist", "shoppinglists" },
+    rows = Rows,
+    select = Select,
+    tooltip = Tooltip,
+    hint = Hint,
+    menu = Menu,
+    -- Nothing typed: the lists themselves; a list's name finds its items.
+    browse = function(row) return row.isList == true end,
+})
+
+local pending = false
+function ns.RefreshLists()
+    if pending or not S.ready then return end
+    pending = true
+    C_Timer.After(0.3, function()
+        pending = false
+        API.RefreshSearchProvider(KEY)
+    end)
+end
+
+-- Auctionator's own list events, when its bus and their names are there.
+local listener = { ReceiveEvent = function() ns.RefreshLists() end }
+local function WatchLists()
+    local bus = Auctionator.EventBus
+    local events = Auctionator.Shopping and Auctionator.Shopping.Events
+    if not (bus and type(bus.Register) == "function" and type(events) == "table") then return end
+    local names = {}
+    for _, k in ipairs({ "ListMetaChange", "ListItemChange", "ListImportFinished" }) do
+        if events[k] then names[#names + 1] = events[k] end
+    end
+    if #names > 0 then bus:Register(listener, names) end
+end
+
+function ns.StartLists()
+    if not Bind() then return ns.Print(L["NOT_READY_LISTS"]) end
+    S.ready = true
+    WatchLists()
+    API.RefreshSearchProvider(KEY)
+end
