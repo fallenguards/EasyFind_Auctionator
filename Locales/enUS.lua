@@ -33,7 +33,8 @@ L["RANGE_MIN_FMT"] = "%s+"
 L["RANGE_MAX_FMT"] = "up to %s"
 
 L["HINT_SEARCH"] = "Search at the Auction House"
-L["HINT_SHOW_LIST"] = "Show the list"
+L["HINT_SHOW_LIST"] = "Open the list"
+L["MENU_OPEN_LIST"] = "Open the list"
 L["HINT_FIND_ITEM"] = "Find the item"
 L["HINT_LINK"] = "Link in chat"
 

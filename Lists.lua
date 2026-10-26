@@ -1,7 +1,8 @@
 -- Auctionator's shopping lists as EasyFind rows: each list and each of
 -- its items, found by name. At the auction house a click searches; away
--- from it a list opens in the search bar and an item is looked up.
--- Writes go through Auctionator's API only, on the player's own pick.
+-- from it a list opens as a checklist note in EasyFind's Notes, kept in
+-- step both ways, and an item is looked up. Writes go through
+-- Auctionator's API only, on the player's own pick or edit.
 local ADDON, ns = ...
 local API = EasyFind and EasyFind.API
 if not (API and API.VERSION == 1) then return end
@@ -34,6 +35,7 @@ local function Bind()
         if type(manager[MANAGER[i]]) ~= "function" then return false end
     end
     S.manager = manager
+    S.alter = type(v1.AlterShoppingListItem) == "function" and v1.AlterShoppingListItem or nil
     return true
 end
 
@@ -153,6 +155,111 @@ function ns.AddToListRows(name, exceptList, raw)
     return rows
 end
 
+-- ==== the list as a note ====================================================
+
+-- Each list opens as a checklist note in EasyFind's Notes: the note follows
+-- the list, and the player's edits there are written to it. An entry is an
+-- item line counted toward its quantity when the client knows its name,
+-- else a line ticked by hand; a note's quest, gold or level lines stay its own.
+local LINKS = API.LinkChecklists ~= nil
+
+local function EntryOf(raw)
+    local term = S.fromString(ADDON, raw)
+    local id = ItemOf(term.searchString)
+    local line
+    if id and term.quantity then
+        line = { link = "item", item = id, target = term.quantity }
+    elseif id then
+        line = { item = id }
+    else
+        line = { text = term.searchString }
+    end
+    return { ref = raw, line = line }
+end
+
+local function Entries(listName)
+    local out, items = {}, Items(listName)
+    for i = 1, #items do out[i] = EntryOf(items[i]) end
+    return out
+end
+
+-- A note line as the entry it stands for: the old entry's other asks kept
+-- (tier, item level, price), its name and quantity the line's.
+local function RawOf(line)
+    if line.link and line.link ~= "item" then return nil end
+    local name = line.text
+    if (name or "") == "" and line.item then name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(line.item) end
+    if (name or "") == "" then return line.ref end
+    local term = line.ref and S.fromString(ADDON, line.ref) or { isExact = true }
+    term.searchString = name
+    term.quantity = line.link == "item" and line.target or nil
+    return S.toString(ADDON, term)
+end
+
+local function SetOf(list)
+    local set = {}
+    for i = 1, #list do set[list[i]] = true end
+    return set
+end
+
+local function Same(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
+-- The player's edits to a list's note, written to the list: a changed
+-- entry altered in place, a removed one deleted, and the list written
+-- whole when an entry is new or the order moved.
+function ns.PushNote(noteID, listName, lines)
+    if not S.ready then return end
+    local want, refs = {}, {}
+    for _, line in ipairs(lines) do
+        local raw = RawOf(line)
+        if raw then want[#want + 1], refs[line.id] = raw, raw end
+    end
+    if HasList(listName) then
+        local have = SetOf(Items(listName))
+        for _, line in ipairs(lines) do
+            local raw = refs[line.id]
+            if S.alter and line.ref and raw and line.ref ~= raw and have[line.ref] and not have[raw] then
+                S.alter(ADDON, listName, line.ref, raw)
+                have[line.ref], have[raw] = nil, true
+            end
+        end
+        local wanted = SetOf(want)
+        for raw in pairs(have) do
+            if not wanted[raw] then S.delete(ADDON, listName, raw) end
+        end
+    end
+    if not (HasList(listName) and Same(Items(listName), want)) then S.create(ADDON, listName, want) end
+    API.SetChecklistRefs(noteID, refs)
+end
+
+-- A list into its note, when it has one (made when make).
+local function SyncNote(listName, make)
+    local id = LINKS and API.LinkedChecklist(KEY, listName, listName, make)
+    if id then API.SyncChecklist(id, Entries(listName)) end
+    return id
+end
+
+function ns.OpenList(listName)
+    local id = S.ready and SyncNote(listName, true)
+    if id then return API.OpenNote(id) end
+    API.ShowScope(KEY, listName)
+end
+
+if LINKS then
+    API.LinkChecklists(KEY, {
+        changed = ns.PushNote,
+        shown = function(noteID, listName)
+            if S.ready and HasList(listName) then API.SyncChecklist(noteID, Entries(listName)) end
+        end,
+    })
+end
+
 -- ==== rows ==================================================================
 
 local function ListSubtext(n)
@@ -197,7 +304,7 @@ local function Select(row)
     if not S.ready then return end
     if row.isList then
         if ns.AtAuctionHouse() then return ns.SearchTerms(ListTerms(row.listName)) end
-        return API.ShowScope(KEY, row.name)
+        return ns.OpenList(row.listName)
     end
     if IsShiftKeyDown() and row.itemID then
         local _, _, link = ItemOf(row.name)
@@ -247,7 +354,10 @@ local function Menu(row)
             if row.isList then ns.SearchTerms(ListTerms(row.listName)) else ns.SearchTerms({ row.term }) end
         end }
     end
-    if row.isList then return rows end
+    if row.isList then
+        rows[#rows + 1] = { kind = "action", label = L["MENU_OPEN_LIST"], onClick = function() ns.OpenList(row.listName) end }
+        return rows
+    end
     rows[#rows + 1] = { kind = "action", label = L["MENU_FIND"], onClick = function() API.OpenSearch(row.name) end }
     if not API.RegisterAddTarget then
         rows[#rows + 1] = { kind = "menu", label = L["MENU_ADD"], rows = function() return ns.AddToListRows(row.name, row.listName, row.raw) end }
@@ -308,6 +418,7 @@ function ns.RefreshLists()
     C_Timer.After(0.3, function()
         pending = false
         API.RefreshSearchProvider(KEY)
+        EachList(function(listName) SyncNote(listName, false) end)
     end)
 end
 
