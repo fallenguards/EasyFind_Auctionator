@@ -120,11 +120,28 @@ local function AddToList(listName, raw, shownName)
     ns.Print(sformat(L["ADDED_FMT"], shownName, listName))
 end
 
--- The flyout: each list the term is not on, then a new one. Without a
--- raw term the item's exact name is the term.
+-- Without a raw term the item's exact name is the term.
+local function TermOf(name, raw)
+    return raw or S.toString(ADDON, { searchString = name, isExact = true })
+end
+
+-- Asks for a list name and makes the list with the item on it.
+function ns.NewListWith(name, raw)
+    if not S.ready then return end
+    raw = TermOf(name, raw)
+    API.ShowDialog({
+        text = L["DIALOG_NEW_LIST"], acceptText = L["DIALOG_CREATE"], hasEditBox = true,
+        onAccept = function(value)
+            value = value and strtrim(value) or ""
+            if value ~= "" then AddToList(value, raw, name) end
+        end,
+    })
+end
+
+-- The flyout: each list the term is not on, then a new one.
 function ns.AddToListRows(name, exceptList, raw)
     if not S.ready then return nil end
-    raw = raw or S.toString(ADDON, { searchString = name, isExact = true })
+    raw = TermOf(name, raw)
     local rows = {}
     EachList(function(listName)
         if listName ~= exceptList then
@@ -132,15 +149,7 @@ function ns.AddToListRows(name, exceptList, raw)
         end
     end)
     if #rows > 0 then rows[#rows + 1] = { kind = "separator" } end
-    rows[#rows + 1] = { kind = "action", label = L["MENU_NEW_LIST"], onClick = function()
-        API.ShowDialog({
-            text = L["DIALOG_NEW_LIST"], acceptText = L["DIALOG_CREATE"], hasEditBox = true,
-            onAccept = function(value)
-                value = value and strtrim(value) or ""
-                if value ~= "" then AddToList(value, raw, name) end
-            end,
-        })
-    end }
+    rows[#rows + 1] = { kind = "action", label = L["MENU_NEW_LIST"], onClick = function() ns.NewListWith(name, raw) end }
     return rows
 end
 
@@ -269,6 +278,12 @@ API.RegisterSearchProvider({
     browse = function(row) return row.isList == true end,
 })
 
+-- An item row's name as the client shows it; a list item's own term name.
+local function RowName(row)
+    if row.raw and row.listName then return row.name end
+    return C_Item.GetItemNameByID and C_Item.GetItemNameByID(row.itemID) or row.name
+end
+
 -- Shopping lists sit in the result menu's Add flyout, beside EasyFind's
 -- own, for an item row and for an item on a list (the other lists).
 if API.RegisterAddTarget then
@@ -279,9 +294,10 @@ if API.RegisterAddTarget then
         end,
         rows = function(row)
             if row.raw and row.listName then return ns.AddToListRows(row.name, row.listName, row.raw) end
-            local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(row.itemID)
-            return ns.AddToListRows(name or row.name)
+            return ns.AddToListRows(RowName(row))
         end,
+        -- The entry's own click: a new list (the lists open on hover).
+        onClick = function(row) ns.NewListWith(RowName(row), row.listName and row.raw or nil) end,
     })
 end
 
