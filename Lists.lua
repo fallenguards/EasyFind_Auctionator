@@ -86,11 +86,21 @@ local function TermParts(term, out)
     return out
 end
 
--- The item behind a term's name, when the client knows it: its id, icon
--- and link; nil for a name it has not seen.
+-- Item ids by name, kept when EasyFind adds an item to a list: the client
+-- finds a name only once the item is in its cache.
+local function KnownIDs()
+    local db = ns.DB()
+    db.itemIDs = db.itemIDs or {}
+    return db.itemIDs
+end
+
+-- The item behind a term's name: its id, icon and link; nil for a name
+-- neither the client nor an earlier add knows.
 local function ItemOf(name)
     local id, _, _, _, icon = C_Item.GetItemInfoInstant(name)
+    id = id or KnownIDs()[name]
     if not id then return nil end
+    icon = icon or (C_Item.GetItemIconByID and C_Item.GetItemIconByID(id))
     local link = select(2, C_Item.GetItemInfo(id))
     return id, icon, link or ("item:" .. id)
 end
@@ -112,7 +122,8 @@ end
 
 -- A term onto a list through Auctionator's API: the list is written back
 -- whole with the term appended (the API has no append of its own).
-local function AddToList(listName, raw, shownName)
+local function AddToList(listName, raw, shownName, itemID)
+    if itemID and shownName then KnownIDs()[shownName] = itemID end
     local items = HasList(listName) and Items(listName) or {}
     for i = 1, #items do
         if items[i] == raw then return ns.Print(sformat(L["ALREADY_FMT"], shownName, listName)) end
@@ -128,30 +139,30 @@ local function TermOf(name, raw)
 end
 
 -- Asks for a list name and makes the list with the item on it.
-function ns.NewListWith(name, raw)
+function ns.NewListWith(name, raw, itemID)
     if not S.ready then return end
     raw = TermOf(name, raw)
     API.ShowDialog({
         text = L["DIALOG_NEW_LIST"], acceptText = L["DIALOG_CREATE"], hasEditBox = true,
         onAccept = function(value)
             value = value and strtrim(value) or ""
-            if value ~= "" then AddToList(value, raw, name) end
+            if value ~= "" then AddToList(value, raw, name, itemID) end
         end,
     })
 end
 
 -- The flyout: each list the term is not on, then a new one.
-function ns.AddToListRows(name, exceptList, raw)
+function ns.AddToListRows(name, exceptList, raw, itemID)
     if not S.ready then return nil end
     raw = TermOf(name, raw)
     local rows = {}
     EachList(function(listName)
         if listName ~= exceptList then
-            rows[#rows + 1] = { kind = "action", label = listName, onClick = function() AddToList(listName, raw, name) end }
+            rows[#rows + 1] = { kind = "action", label = listName, onClick = function() AddToList(listName, raw, name, itemID) end }
         end
     end)
     if #rows > 0 then rows[#rows + 1] = { kind = "separator" } end
-    rows[#rows + 1] = { kind = "action", label = L["MENU_NEW_LIST"], onClick = function() ns.NewListWith(name, raw) end }
+    rows[#rows + 1] = { kind = "action", label = L["MENU_NEW_LIST"], onClick = function() ns.NewListWith(name, raw, itemID) end }
     return rows
 end
 
@@ -253,6 +264,7 @@ end
 
 if LINKS then
     API.LinkChecklists(KEY, {
+        category = { key = "ShoppingLists", label = L["NOTE_CATEGORY"] },
         changed = ns.PushNote,
         shown = function(noteID, listName)
             if S.ready and HasList(listName) then API.SyncChecklist(noteID, Entries(listName)) end
@@ -311,14 +323,14 @@ local function Select(row)
         return InsertChatLink(link)
     end
     if ns.AtAuctionHouse() then return ns.SearchTerms({ row.term }) end
-    API.OpenSearch(row.name)
+    ns.OpenList(row.listName)
 end
 
 local function Hint(row)
     if not S.ready then return nil end
     local at = ns.AtAuctionHouse()
     if row.isList then return { click = at and L["HINT_SEARCH"] or L["HINT_SHOW_LIST"] } end
-    return { click = at and L["HINT_SEARCH"] or L["HINT_FIND_ITEM"], shift = row.itemID and L["HINT_LINK"] or nil }
+    return { click = at and L["HINT_SEARCH"] or L["HINT_SHOW_LIST"], shift = row.itemID and L["HINT_LINK"] or nil }
 end
 
 -- A list: its items with their last prices. An item: the item's own
@@ -404,10 +416,10 @@ if API.RegisterAddTarget then
         end,
         rows = function(row)
             if row.raw and row.listName then return ns.AddToListRows(row.name, row.listName, row.raw) end
-            return ns.AddToListRows(RowName(row))
+            return ns.AddToListRows(RowName(row), nil, nil, row.itemID)
         end,
         -- The entry's own click: a new list (the lists open on hover).
-        onClick = function(row) ns.NewListWith(RowName(row), row.listName and row.raw or nil) end,
+        onClick = function(row) ns.NewListWith(RowName(row), row.listName and row.raw or nil, row.itemID) end,
     })
 end
 

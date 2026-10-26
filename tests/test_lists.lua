@@ -42,10 +42,11 @@ Auctionator = { API = { v1 = v1 }, Shopping = { ListManager = manager } }
 
 -- EasyFind: the linked-checklist calls recorded; one note.
 local note = {}
-local registered
+local registered, provider, addTarget
 EasyFind = { API = {
     VERSION = 1,
-    RegisterSearchProvider = function() end,
+    RegisterSearchProvider = function(def) provider = def end,
+    RegisterAddTarget = function(def) addTarget = def end,
     RefreshSearchProvider = function() end,
     LinkChecklists = function(_, handlers) registered = handlers end,
     LinkedChecklist = function(_, key, _, make) if make then note.key = key end return note.key and 7 or nil end,
@@ -61,12 +62,15 @@ C_Item = {
     GetItemInfoInstant = function(name) return ITEMS[name], nil, nil, nil, 134000 end,
     GetItemInfo = function(id) return NAMES[id], "item:" .. id end,
     GetItemNameByID = function(id) return NAMES[id] end,
+    GetItemIconByID = function(id) return 130000 + id end,
 }
 C_Timer = { After = function(_, fn) fn() end }
 IsShiftKeyDown = function() return false end
 
+local db = {}
 local ns = { KEY = "auctionator", L = setmetatable({}, { __index = function(_, k) return k end }),
-             AtAuctionHouse = function() return false end, Print = function() end, Coins = tostring }
+             AtAuctionHouse = function() return false end, Print = function() end, Coins = tostring,
+             DB = function() return db end }
 assert(loadfile(ROOT .. "Lists.lua"))("EasyFind_Auctionator", ns)
 ns.StartLists()
 
@@ -124,6 +128,25 @@ check("anUntouchedNoteWritesNothing", function()
         { id = 5, link = "quest", text = "Bring the cloth" },
     })
     eq(#calls, 0, "a quest line is the note's own; the list already matches")
+end)
+
+-- Added from a result row while the client has not cached the item: the
+-- line still carries the item, so it shows its icon.
+check("anItemAddedFromARowKeepsItsIcon", function()
+    local rows = addTarget.rows({ itemID = 4306, name = "Silk Cloth" })
+    for _, r in ipairs(rows) do
+        if r.label == "Mats" then r.onClick() end
+    end
+    ns.OpenList("Mats")
+    local last = note.entries[#note.entries]
+    eq(last.ref, "Silk Cloth;")
+    eq(last.line.item, 4306, "known by the id the row carried")
+end)
+
+check("anItemOnAListOpensTheList", function()
+    note.opened = nil
+    provider.select({ name = "Linen Cloth", listName = "Mats", raw = "Linen Cloth;40", term = { searchString = "Linen Cloth" } })
+    eq(note.opened, 7, "away from the auction house: the list's note")
 end)
 
 print(("%d passed, %d failed"):format(pass, fail))
