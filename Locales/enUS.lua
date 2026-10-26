@@ -38,6 +38,7 @@ L["HINT_FIND_ITEM"] = "Find the item"
 L["HINT_LINK"] = "Link in chat"
 
 L["MENU_ADD"] = "Add to shopping list"
+L["ADD_TARGET"] = "Shopping list"
 L["MENU_NEW_LIST"] = "New list..."
 L["MENU_REMOVE_FMT"] = "Remove from %s"
 L["MENU_SEARCH"] = "Search at the Auction House"

@@ -240,7 +240,9 @@ local function Menu(row)
     end
     if row.isList then return rows end
     rows[#rows + 1] = { kind = "action", label = L["MENU_FIND"], onClick = function() API.OpenSearch(row.name) end }
-    rows[#rows + 1] = { kind = "menu", label = L["MENU_ADD"], rows = function() return ns.AddToListRows(row.name, row.listName, row.raw) end }
+    if not API.RegisterAddTarget then
+        rows[#rows + 1] = { kind = "menu", label = L["MENU_ADD"], rows = function() return ns.AddToListRows(row.name, row.listName, row.raw) end }
+    end
     rows[#rows + 1] = { kind = "action", label = sformat(L["MENU_REMOVE_FMT"], row.listName), onClick = function()
         S.delete(ADDON, row.listName, row.raw)
         ns.Print(sformat(L["REMOVED_FMT"], row.name, row.listName))
@@ -266,6 +268,22 @@ API.RegisterSearchProvider({
     -- Nothing typed: the lists themselves; a list's name finds its items.
     browse = function(row) return row.isList == true end,
 })
+
+-- Shopping lists sit in the result menu's Add flyout, beside EasyFind's
+-- own, for an item row and for an item on a list (the other lists).
+if API.RegisterAddTarget then
+    API.RegisterAddTarget({
+        key = KEY, extension = KEY, label = L["ADD_TARGET"], fullLabel = L["MENU_ADD"],
+        applies = function(row)
+            return S.ready and (row.itemID ~= nil or (row.raw ~= nil and row.listName ~= nil and not row.isList))
+        end,
+        rows = function(row)
+            if row.raw and row.listName then return ns.AddToListRows(row.name, row.listName, row.raw) end
+            local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(row.itemID)
+            return ns.AddToListRows(name or row.name)
+        end,
+    })
+end
 
 local pending = false
 function ns.RefreshLists()

@@ -82,7 +82,10 @@ end
 local function RowMenu(row)
     if not ns.ListsReady() then return nil end
     local name = RowItemName(row)
-    local rows = { { kind = "menu", label = L["MENU_ADD"], rows = function() return ns.AddToListRows(name) end } }
+    local rows = {}
+    if not API.RegisterAddTarget then
+        rows[1] = { kind = "menu", label = L["MENU_ADD"], rows = function() return ns.AddToListRows(name) end }
+    end
     if ns.AtAuctionHouse() then
         rows[#rows + 1] = { kind = "action", label = L["MENU_SEARCH"],
                             onClick = function() ns.SearchTerms({ { searchString = name, isExact = true } }) end }
