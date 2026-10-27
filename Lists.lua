@@ -215,6 +215,8 @@ local function RawOf(line)
     local name = line.text
     if (name or "") == "" and line.item then name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(line.item) end
     if (name or "") == "" then return line.ref end
+    -- The list comes back by name: the name keeps its item.
+    if line.item then KnownIDs()[name] = line.item end
     local term = line.ref and S.fromString(ADDON, line.ref) or { isExact = true }
     term.searchString = name
     term.quantity = line.target

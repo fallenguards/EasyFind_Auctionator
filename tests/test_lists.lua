@@ -145,6 +145,31 @@ check("anItemAddedFromARowKeepsItsIcon", function()
     eq(last.line.item, 4306, "known by the id the row carried")
 end)
 
+-- Picked in the note from the catalog while the client had not cached it
+-- (2026-10-27): the list comes back by name and the line stays the item,
+-- its count and its quality link with it.
+check("anItemPickedInTheNoteStaysTheItem", function()
+    NAMES[8836] = "Arthas' Tears"
+    ns.PushNote(7, "Mats", {
+        { id = 1, ref = "Linen Cloth;40", item = 2589, link = "item", target = 40 },
+        { id = 6, item = 8836, link = "item", target = 5 },
+    })
+    ns.OpenList("Mats")
+    local last = note.entries[#note.entries]
+    eq(last.ref, "Arthas' Tears;5")
+    eq(last.line.item, 8836, "the item, not its name as words")
+    eq(last.line.target, 5)
+end)
+
+-- A name the client does not know keeps the count typed with it.
+check("aNameNotYetKnownKeepsItsCount", function()
+    ns.PushNote(7, "Mats", { { id = 7, text = "Mystery Herb", target = 3 } })
+    ns.OpenList("Mats")
+    local last = note.entries[#note.entries]
+    eq(last.line.text, "Mystery Herb")
+    eq(last.line.target, 3)
+end)
+
 check("anItemOnAListOpensTheList", function()
     note.opened = nil
     provider.select({ name = "Linen Cloth", listName = "Mats", raw = "Linen Cloth;40", term = { searchString = "Linen Cloth" } })
