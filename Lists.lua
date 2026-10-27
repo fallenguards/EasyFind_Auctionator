@@ -197,7 +197,7 @@ local function EntryOf(raw)
     elseif id then
         line = { item = id }
     else
-        line = { text = term.searchString }
+        line = { text = term.searchString, target = term.quantity }
     end
     return { ref = raw, line = line }
 end
@@ -217,7 +217,7 @@ local function RawOf(line)
     if (name or "") == "" then return line.ref end
     local term = line.ref and S.fromString(ADDON, line.ref) or { isExact = true }
     term.searchString = name
-    term.quantity = line.link == "item" and line.target or nil
+    term.quantity = line.target
     return S.toString(ADDON, term)
 end
 
@@ -279,6 +279,8 @@ end
 if LINKS then
     API.LinkChecklists(KEY, {
         category = { key = "ShoppingLists", label = L["NOTE_CATEGORY"] },
+        -- Names typed in the note are items, with a count each.
+        items = true,
         changed = ns.PushNote,
         shown = function(noteID, listName)
             if S.ready and HasList(listName) then API.SyncChecklist(noteID, Entries(listName)) end
