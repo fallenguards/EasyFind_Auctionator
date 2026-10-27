@@ -151,6 +151,20 @@ function ns.NewListWith(name, raw, itemID)
     })
 end
 
+-- Asks for a name and makes an empty list, opened as its note.
+function ns.NewList()
+    if not S.ready then return end
+    API.ShowDialog({
+        text = L["DIALOG_NEW_LIST"], acceptText = L["DIALOG_CREATE"], hasEditBox = true,
+        onAccept = function(value)
+            value = value and strtrim(value) or ""
+            if value == "" then return end
+            if not HasList(value) then S.create(ADDON, value, {}) end
+            ns.OpenList(value)
+        end,
+    })
+end
+
 -- The flyout: each list the term is not on, then a new one.
 function ns.AddToListRows(name, exceptList, raw, itemID)
     if not S.ready then return nil end
@@ -420,6 +434,8 @@ if API.RegisterAddTarget then
         end,
         -- The entry's own click: a new list (the lists open on hover).
         onClick = function(row) ns.NewListWith(RowName(row), row.listName and row.raw or nil, row.itemID) end,
+        -- An empty one, from Notes' + menu.
+        new = ns.NewList, newLabel = L["MENU_NEW_SHOPPING_LIST"],
     })
 end
 

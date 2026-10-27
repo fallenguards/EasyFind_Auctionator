@@ -53,6 +53,7 @@ EasyFind = { API = {
     SyncChecklist = function(_, entries) note.entries = entries end,
     SetChecklistRefs = function(_, refs) note.refs = refs end,
     OpenNote = function(id) note.opened = id end,
+    ShowDialog = function(opts) note.dialog = opts end,
 } }
 
 -- The client: two items it knows by name.
@@ -66,6 +67,7 @@ C_Item = {
 }
 C_Timer = { After = function(_, fn) fn() end }
 IsShiftKeyDown = function() return false end
+strtrim = function(str) return (str:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 local db = {}
 local ns = { KEY = "auctionator", L = setmetatable({}, { __index = function(_, k) return k end }),
@@ -147,6 +149,17 @@ check("anItemOnAListOpensTheList", function()
     note.opened = nil
     provider.select({ name = "Linen Cloth", listName = "Mats", raw = "Linen Cloth;40", term = { searchString = "Linen Cloth" } })
     eq(note.opened, 7, "away from the auction house: the list's note")
+end)
+
+-- Notes' + menu: New shopping list asks a name, makes the list empty and
+-- opens it as its note.
+check("aNewEmptyListFromNotesPlus", function()
+    eq(addTarget.newLabel, "MENU_NEW_SHOPPING_LIST")
+    note.opened = nil
+    addTarget.new()
+    note.dialog.onAccept("Herbs")
+    eq(#lists["Herbs"], 0, "made empty")
+    eq(note.opened, 7, "and opened as its note")
 end)
 
 print(("%d passed, %d failed"):format(pass, fail))
