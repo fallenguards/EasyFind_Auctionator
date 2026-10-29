@@ -17,3 +17,5 @@ Retail and WoW Forever.
 - Open a list as a checklist in EasyFind's Notes. Items in your bags count toward each quantity, and your edits go back to the list.
 - Hover a list to see its items with their last scanned prices.
 - Start a new shopping list from the + menu in Notes.
+
+Tip: EasyFind's item catalog, every item in the game, is off by default. It's the easiest way to find what you want to buy. Type `@cat` before an item's name to search the catalog alone, or turn it on for every search under Items > General Catalog in EasyFind's filter menu.
