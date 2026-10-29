@@ -1,8 +1,8 @@
 ## Interface: 120105, 16001
 ## Title: EasyFind [Auctionator]
-## Notes: Auctionator's prices on EasyFind's item rows, and your shopping lists in its search bar. Requires Auctionator.
+## Notes: Your Auctionator shopping lists in EasyFind's search bar and Notes. Requires Auctionator.
 ## Author: justawower
-## Version: 0.1.0
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\EasyFind\textures\SpyglassMinimap
 ## Group: EasyFind
 ## Category: UI
