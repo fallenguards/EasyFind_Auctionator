@@ -3,6 +3,7 @@
 ## Notes: Your Auctionator shopping lists in EasyFind's search bar and Notes. Requires Auctionator.
 ## Author: justawower
 ## Version: 1.0.0
+## X-Curse-Project-ID: 1772197
 ## IconTexture: Interface\AddOns\EasyFind\textures\SpyglassMinimap
 ## Group: EasyFind
 ## Category: UI
