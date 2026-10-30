@@ -9,6 +9,7 @@ if not (API and API.VERSION == 1) then return end
 
 local L = ns.L
 local KEY = ns.KEY
+if not KEY then return end   -- Auctionator absent: Prices.lua set nothing up
 local MAX_TOOLTIP_ITEMS = 12
 
 local C_Item = C_Item

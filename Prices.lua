@@ -6,6 +6,9 @@ local API = EasyFind and EasyFind.API
 if not (API and API.VERSION == 1) then return end
 
 local L = ns.L
+-- Loaded beside Auctionator (OptionalDeps), nothing without it.
+local IsAddOnLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+if not (IsAddOnLoaded and IsAddOnLoaded("Auctionator")) then return end
 local KEY = "auctionator"
 local ICON = "Interface\\AddOns\\EasyFind_Auctionator\\tag"
 ns.KEY = KEY
