@@ -36,7 +36,7 @@ local v1 = {
         local name, qty = raw:match("^(.-);(.*)$")
         return { searchString = name, quantity = tonumber(qty) }
     end,
-    MultiSearchAdvanced = function() end,
+    MultiSearchAdvanced = function(_, terms) calls[#calls + 1] = "search " .. terms[1].searchString end,
 }
 Auctionator = { API = { v1 = v1 }, Shopping = { ListManager = manager } }
 
@@ -97,6 +97,19 @@ check("aListOpensAsItsNote", function()
     eq(e[2].line.link, nil)
     eq(e[3].line.text, "Dust", "a name the client does not know: its text")
     eq(registered and registered.changed, ns.PushNote, "edits come back to the list")
+    eq(registered.category.window, "auctionhouse", "each list note gets the Auction House tag")
+end)
+
+check("aLinesAuctionSearch_isTheListsOwnTerm", function()
+    calls = {}
+    local linen = { id = 1, ref = "Linen Cloth;20", item = 2589, link = "item", target = 20 }
+    eq(registered.search(7, "Mats", linen), false, "away from the auction house: not taken")
+    ns.AtAuctionHouse = function() return true end
+    eq(registered.search(7, "Mats", linen), true)
+    eq(calls[1], "search Linen Cloth", "the list's own term searched")
+    eq(registered.search(7, "Mats", { id = 3, ref = "Dust;", text = "Dust" }), true, "a plain name too")
+    eq(calls[2], "search Dust")
+    ns.AtAuctionHouse = function() return false end
 end)
 
 check("aNewAmountAltersTheEntry", function()
@@ -185,6 +198,63 @@ check("aNewEmptyListFromNotesPlus", function()
     note.dialog.onAccept("Herbs")
     eq(#lists["Herbs"], 0, "made empty")
     eq(note.opened, 7, "and opened as its note")
+end)
+
+-- The first search row makes a list: it wears EasyFind's create badge, sits
+-- under @shopping with nothing typed, and a click asks a name, makes the
+-- list empty and opens it as its note.
+check("theCreateRowComesFirst", function()
+    local rows = provider.rows()
+    eq(rows[1].name, "CREATE_LIST")
+    eq(rows[1].createRow, true, "the badge's field")
+    eq(provider.browse(rows[1]), true)
+    eq(provider.tooltip(rows[1]), false, "no tooltip of its own")
+    eq(provider.menu(rows[1]), nil, "no menu of its own")
+    note.opened, note.dialog = nil, nil
+    provider.select(rows[1])
+    note.dialog.onAccept("Potions")
+    eq(#lists["Potions"], 0, "made empty")
+    eq(note.opened, 7, "opened as its note")
+end)
+
+-- A note the player made a shopping list becomes a list of its lines, under
+-- its title or the next free name; made a checklist again, the list goes
+-- (2026-11-02).
+check("aNoteMadeAShoppingListBecomesAList", function()
+    local lines = { { id = 1, item = 2589, link = "item", target = 5 }, { id = 2, item = 2592 } }
+    note.refs = nil
+    local key = registered.adopt(12, "Mats", lines)
+    eq(key, "Mats 2", "Mats is taken: the next free name")
+    eq(#lists["Mats 2"], 2, "its lines")
+    eq(lists["Mats 2"][1], "Linen Cloth;5")
+    eq(note.refs and note.refs[1], "Linen Cloth;5", "the refs went back")
+    manager.GetUnusedName = function(_, prefix) return prefix .. " (new)" end
+    eq(registered.adopt(13, "Mats", {}), "Mats (new)", "Auctionator's own free name where it has one")
+    manager.GetUnusedName = nil
+end)
+
+check("aShoppingListMadeAChecklistAgainLosesItsList", function()
+    local deleted
+    manager.Delete = function(_, name)
+        deleted = name
+        for i = 1, #order do if order[i] == name then table.remove(order, i) break end end
+        lists[name] = nil
+    end
+    registered.drop(12, "Mats 2")
+    eq(deleted, "Mats 2", "Auctionator's own delete")
+    eq(lists["Mats 2"], nil)
+    manager.Delete = nil
+    registered.drop(13, "Mats (new)")
+    eq(#lists["Mats (new)"], 0, "without one the list is emptied")
+    registered.drop(14, "Nothing")
+end)
+
+-- A typed name EasyFind's catalog knew and the client could not name yet
+-- left the list (retail Hearthstone, 2026-11-03): the note's name lists it.
+check("anItemTheClientCannotNameYet_listedByTheNotesName", function()
+    ns.PushNote(15, "Hearth", { { id = 1, item = 6948, name = "Hearthstone" }, { id = 2, item = 6949 } })
+    eq(#lists["Hearth"], 1, "an item with no name anywhere stays out")
+    eq(lists["Hearth"][1], "Hearthstone;", "listed by the name Notes gave")
 end)
 
 print(("%d passed, %d failed"):format(pass, fail))

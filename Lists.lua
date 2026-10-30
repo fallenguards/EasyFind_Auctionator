@@ -1,8 +1,9 @@
--- Auctionator's shopping lists as EasyFind rows: each list and each of
--- its items, found by name. At the auction house a click searches; away
--- from it a list opens as a checklist note in EasyFind's Notes, kept in
--- step both ways, and an item is looked up. Writes go through
--- Auctionator's API only, on the player's own pick or edit.
+-- Auctionator's shopping lists as EasyFind rows: a Create shopping list
+-- row, then each list and each of its items, found by name. At the
+-- auction house a click searches; away from it a list opens as a
+-- checklist note in EasyFind's Notes, kept in step both ways, and an item
+-- is looked up. Writes go through Auctionator's API only, on the player's
+-- own pick or edit.
 local ADDON, ns = ...
 local API = EasyFind and EasyFind.API
 if not (API and API.VERSION == 1) then return end
@@ -215,6 +216,8 @@ local function RawOf(line)
     if line.link and line.link ~= "item" then return nil end
     local name = line.text
     if (name or "") == "" and line.item then name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(line.item) end
+    -- The client has no name yet: EasyFind's, as the player typed it.
+    if (name or "") == "" then name = line.name end
     if (name or "") == "" then return line.ref end
     -- The list comes back by name: the name keeps its item.
     if line.item then KnownIDs()[name] = line.item end
@@ -266,6 +269,34 @@ function ns.PushNote(noteID, listName, lines)
     API.SetChecklistRefs(noteID, refs)
 end
 
+-- A note the player made a shopping list: a new list of its lines, under
+-- its title or the next free name, which the note follows from then on.
+local function Adopt(noteID, title, lines)
+    if not S.ready then return nil end
+    local name = strtrim(title or "")
+    if name == "" then name = L["NOTE_CATEGORY"] end
+    if S.manager.GetUnusedName then
+        name = S.manager:GetUnusedName(name)
+    else
+        local base, n = name, 1
+        while HasList(name) do n = n + 1; name = base .. " " .. n end
+    end
+    S.create(ADDON, name, {})
+    ns.PushNote(noteID, name, lines)
+    return name
+end
+
+-- The note made a checklist again (EasyFind asked first): its list goes.
+-- Auctionator's own delete where it has one, else the list is emptied.
+local function Drop(_, listName)
+    if not (S.ready and HasList(listName)) then return end
+    if S.manager.Delete then
+        S.manager:Delete(listName)
+        return
+    end
+    for _, raw in ipairs(Items(listName)) do S.delete(ADDON, listName, raw) end
+end
+
 -- A list into its note, when it has one (made when make).
 local function SyncNote(listName, make)
     local id = LINKS and API.LinkedChecklist(KEY, listName, listName, make)
@@ -281,10 +312,23 @@ end
 
 if LINKS then
     API.LinkChecklists(KEY, {
-        category = { key = "ShoppingLists", label = L["NOTE_CATEGORY"] },
+        -- Filed under their own category, each with the Auction House tag.
+        category = { key = "ShoppingLists", label = L["NOTE_CATEGORY"], window = "auctionhouse" },
         -- Names typed in the note are items, with a count each.
         items = true,
         changed = ns.PushNote,
+        -- A note made a shopping list becomes a list; made a checklist again, it goes.
+        adopt = Adopt,
+        drop = Drop,
+        -- A line's auction search (Search AH on its menu, Ctrl+click on
+        -- it): the list's own term, exact match and all.
+        search = function(_, _, line)
+            if not (S.ready and ns.AtAuctionHouse()) then return false end
+            local raw = RawOf(line)
+            if not raw then return false end
+            ns.SearchTerms({ S.fromString(ADDON, raw) })
+            return true
+        end,
         shown = function(noteID, listName)
             if S.ready and HasList(listName) then API.SyncChecklist(noteID, Entries(listName)) end
         end,
@@ -299,9 +343,12 @@ local function ListSubtext(n)
     return sformat(L["LIST_SUBTEXT_FMT"], n)
 end
 
+-- The create row first: EasyFind's green plus badge (createRow), a click
+-- asks the new list's name.
 local function Rows()
     if not S.ready then return {} end
-    local out = {}
+    local out = { { name = L["CREATE_LIST"], isCreate = true, createRow = true,
+                    searchCommandDesc = L["CREATE_LIST_SUB"], keywords = { "shopping", "list", "new" } } }
     EachList(function(listName)
         local items = Items(listName)
         out[#out + 1] = { name = listName, listName = listName, isList = true,
@@ -333,6 +380,7 @@ end
 -- links a known item in chat.
 local function Select(row)
     if not S.ready then return end
+    if row.isCreate then return ns.NewList() end
     if row.isList then
         if ns.AtAuctionHouse() then return ns.SearchTerms(ListTerms(row.listName)) end
         return ns.OpenList(row.listName)
@@ -347,6 +395,7 @@ end
 
 local function Hint(row)
     if not S.ready then return nil end
+    if row.isCreate then return { click = L["HINT_CREATE"] } end
     local at = ns.AtAuctionHouse()
     if row.isList then return { click = at and L["HINT_SEARCH"] or L["HINT_SHOW_LIST"] } end
     return { click = at and L["HINT_SEARCH"] or L["HINT_SHOW_LIST"], shift = row.itemID and L["HINT_LINK"] or nil }
@@ -355,7 +404,7 @@ end
 -- A list: its items with their last prices. An item: the item's own
 -- tooltip, then its list and what the term asks for.
 local function Tooltip(row, tt)
-    if not S.ready then return false end
+    if not S.ready or row.isCreate then return false end
     if row.isList then
         tt:SetText(row.name, 1, 1, 1)
         local items = Items(row.listName)
@@ -378,7 +427,7 @@ local function Tooltip(row, tt)
 end
 
 local function Menu(row)
-    if not S.ready then return nil end
+    if not S.ready or row.isCreate then return nil end
     local rows = {}
     if ns.AtAuctionHouse() then
         rows[#rows + 1] = { kind = "action", label = L["MENU_SEARCH"], onClick = function()
@@ -415,8 +464,8 @@ API.RegisterSearchProvider({
     tooltip = Tooltip,
     hint = Hint,
     menu = Menu,
-    -- Nothing typed: the lists themselves; a list's name finds its items.
-    browse = function(row) return row.isList == true end,
+    -- Nothing typed: the create row and the lists; a list's name finds its items.
+    browse = function(row) return row.isList == true or row.isCreate == true end,
 })
 
 -- An item row's name as the client shows it; a list item's own term name.
