@@ -32,7 +32,7 @@ globals = {
 
 -- WoW API globals (read-only)
 read_globals = {
-    "Auctionator", "AuctionHouseFrame", "AuctionFrame", "OKAY",
+    "Auctionator", "AuctionHouseFrame", "AuctionFrame", "OKAY", "IsAddOnLoaded",
     "QUESTS_LABEL", "QUEST_OBJECTIVES", "QUEST_LOG", "TRACK_QUEST", "UNTRACK_QUEST", "ABANDON_QUEST",
     "GetQuestLink", "QuestMapFrame_OpenToQuestDetails", "QuestMapQuestOptions_AbandonQuest", "GetQuestDifficultyColor",
     "GetQuestLogIndexByID", "GetQuestLogTitle", "IsQuestWatched", "AddQuestWatch", "RemoveQuestWatch", "SelectQuestLogEntry",

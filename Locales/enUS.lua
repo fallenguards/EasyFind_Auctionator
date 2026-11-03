@@ -15,6 +15,11 @@ L["DECORATOR_LABEL"] = "Auctionator price"
 L["OPT_ROW_PRICE"] = "Price on item rows"
 L["OPT_ROW_PRICE_TIP"] = "The last scanned auction price at the right of each item row."
 
+L["PRICE_KIND"] = "Auction price"
+L["PRICE_AGE_TODAY"] = "scanned today"
+L["PRICE_AGE_ONE"] = "scanned yesterday"
+L["PRICE_AGE_FMT"] = "scanned %d days ago"
+
 L["CREATE_LIST"] = "Create shopping list"
 L["CREATE_LIST_SUB"] = "Create a new shopping list"
 L["HINT_CREATE"] = "Name a new list"

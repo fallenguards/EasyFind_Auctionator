@@ -27,3 +27,5 @@ jobs:
           luaVersion: '5.4'
       - name: Shopping lists against a stand-in Auctionator
         run: lua tests/test_lists.lua
+      - name: Prices and searches against a stand-in Auctionator
+        run: lua tests/test_prices.lua
