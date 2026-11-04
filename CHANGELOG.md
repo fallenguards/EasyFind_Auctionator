@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] - 2026-11-04
+
+- EasyFind 5.0.0 made Notes an addon of its own: this extension now lists the EasyFind: Notes Extension as required, so the CurseForge app installs it with this one and your shopping lists in Notes keep working.
+- Without the Notes Extension, a chat line says once where to get it, with a link to its page.
+
 ## [1.1.0] - 2026-11-03
 
 - Notes' shopping lists show Auctionator's prices: each line the price of what is left to buy, the list its total, and on hover the price of one and how old its scan is. Needs EasyFind 4.3.0.
