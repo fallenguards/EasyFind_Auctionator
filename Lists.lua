@@ -523,3 +523,24 @@ function ns.StartLists()
     WatchLists()
     API.RefreshSearchProvider(KEY)
 end
+
+-- EasyFind 5.0.0 made Notes an addon of its own: with no Notes Extension
+-- the lists' Notes side is gone, so each version of this one says so
+-- once, with the extension's page (EasyFind opens the link).
+local NOTES_PROJECT = "1782460"
+local NOTES_PAGE = "|cff70d6ff|Heasyfind:page:easyfind-notes-extension|h[EasyFind: Notes Extension]|h|r"
+
+function ns.TellNotesMissing()
+    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata
+    local Exists = C_AddOns and C_AddOns.DoesAddOnExist
+    if not (GetMeta and Exists) or InCombatLockdown() then return end
+    local core = tonumber((GetMeta("EasyFind", "Version") or ""):match("^(%d+)"))
+    if not core or core < 5 then return end
+    -- An older EasyFind's own copy of Notes is no extension: no project ID.
+    if Exists("EasyFind_Notes") and GetMeta("EasyFind_Notes", "X-Curse-Project-ID") == NOTES_PROJECT then return end
+    local version = GetMeta(ADDON, "Version")
+    local db = ns.DB()
+    if db.notesToldFor == version then return end
+    db.notesToldFor = version
+    ns.Print(L["NEED_NOTES_FMT"]:format(NOTES_PAGE))
+end

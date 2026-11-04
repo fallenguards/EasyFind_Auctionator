@@ -167,6 +167,8 @@ events:SetScript("OnEvent", function(self, event)
             ns.Print(L["NOT_READY_PRICES"])
         end
         ns.StartLists()
+        -- After EasyFind's own login notice (10 s), never beside it.
+        C_Timer.After(15, function() if ns.TellNotesMissing then ns.TellNotesMissing() end end)
         -- A list line's Ctrl+click searches in Auctionator's own tab.
         if API.RegisterAuctionSearch then
             API.RegisterAuctionSearch(KEY, function(_, name)

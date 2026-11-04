@@ -257,5 +257,35 @@ check("anItemTheClientCannotNameYet_listedByTheNotesName", function()
     eq(lists["Hearth"][1], "Hearthstone;", "listed by the name Notes gave")
 end)
 
+-- EasyFind 5.0.0 moved Notes out (2026-11-04): with no Notes Extension
+-- the extension says so once a version, with its page.
+check("noNotesExtension_toldOnceAVersion_onlyFromEasyFind5", function()
+    local meta = { EasyFind = { Version = "5.0.0" }, EasyFind_Auctionator = { Version = "1.1.1" } }
+    C_AddOns = {
+        DoesAddOnExist = function(name) return meta[name] ~= nil end,
+        GetAddOnMetadata = function(name, field) return meta[name] and meta[name][field] end,
+    }
+    InCombatLockdown = function() return false end
+    rawset(ns.L, "NEED_NOTES_FMT", "Notes need the %s")
+    local said = {}
+    ns.Print = function(text) said[#said + 1] = text end
+    ns.TellNotesMissing()
+    eq(#said, 1, "told")
+    eq(said[1]:find("easyfind:page:easyfind-notes-extension", 1, true) ~= nil, true, "with the page")
+    ns.TellNotesMissing()
+    eq(#said, 1, "once a version")
+    meta.EasyFind_Auctionator.Version = "1.1.2"
+    meta.EasyFind_Notes = { Version = "4.3.0" }
+    ns.TellNotesMissing()
+    eq(#said, 2, "an old EasyFind's own copy is no extension")
+    meta.EasyFind_Auctionator.Version = "1.1.3"
+    meta.EasyFind_Notes = { Version = "1.0.0", ["X-Curse-Project-ID"] = "1782460" }
+    ns.TellNotesMissing()
+    eq(#said, 2, "the extension is there")
+    meta.EasyFind_Notes, meta.EasyFind.Version = nil, "4.3.0"
+    ns.TellNotesMissing()
+    eq(#said, 2, "EasyFind 4 has Notes built in")
+end)
+
 print(("%d passed, %d failed"):format(pass, fail))
 if fail > 0 then os.exit(1) end
