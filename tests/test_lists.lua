@@ -174,6 +174,18 @@ check("anItemPickedInTheNoteStaysTheItem", function()
     eq(last.line.target, 5)
 end)
 
+-- A line with no id (a note saved before its lines had ids, Era
+-- 2026-11-02: Lists.lua table index is nil) still joins the list.
+check("aLineWithNoIdStillJoinsTheList", function()
+    calls = {}
+    ns.PushNote(7, "Mats", {
+        { id = 1, ref = "Linen Cloth;40", item = 2589, link = "item", target = 40 },
+        { text = "Mageroyal" },
+    })
+    eq(table.concat(calls, " | "), "delete Arthas' Tears;5 | create Mats [Linen Cloth;40,Mageroyal;]")
+    eq(note.refs[1], "Linen Cloth;40", "the lines with ids keep their entries")
+end)
+
 -- A name the client does not know keeps the count typed with it.
 check("aNameNotYetKnownKeepsItsCount", function()
     ns.PushNote(7, "Mats", { { id = 7, text = "Mystery Herb", target = 3 } })

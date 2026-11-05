@@ -249,7 +249,11 @@ function ns.PushNote(noteID, listName, lines)
     local want, refs = {}, {}
     for _, line in ipairs(lines) do
         local raw = RawOf(line)
-        if raw then want[#want + 1], refs[line.id] = raw, raw end
+        if raw then
+            want[#want + 1] = raw
+            -- A line from a note saved before lines had ids: in the list, no ref.
+            if line.id then refs[line.id] = raw end
+        end
     end
     if HasList(listName) then
         local have = SetOf(Items(listName))
