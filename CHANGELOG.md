@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.2] - 2026-11-05
+
+- A shopping list made from a note saved by an older version no longer stops with an error when it saves; every line still reaches the Auctionator list.
+
 ## [1.1.1] - 2026-11-04
 
 - EasyFind 5.0.0 made Notes an addon of its own: this extension now lists the EasyFind: Notes Extension as required, so the CurseForge app installs it with this one and your shopping lists in Notes keep working.
