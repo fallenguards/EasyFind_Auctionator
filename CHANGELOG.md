@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.3] - 2026-11-23
+
+- Marked up to date for WoW 12.1.7, so the game no longer lists it as out of date there.
+
 ## [1.1.2] - 2026-11-05
 
 - A shopping list made from a note saved by an older version no longer stops with an error when it saves; every line still reaches the Auctionator list.
